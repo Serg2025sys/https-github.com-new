@@ -228,7 +228,7 @@ async def main():
     app.router.add_post("/webhook", handle_webhook)
     app.router.add_get("/", handle_root)
 
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 10000))
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, port=port)
