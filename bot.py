@@ -11,29 +11,31 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 
+# 🔧 Логи
 logging.basicConfig(level=logging.INFO)
 
+# 🔑 Дані з середовища
 TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 ADMIN_ID = 466868254
 
 if not TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN не задано в середовищі!")
+    raise RuntimeError("❌ BOT_TOKEN не задано!")
 if not WEBHOOK_URL:
-    raise RuntimeError("❌ WEBHOOK_URL не задано в середовищі!")
+    raise RuntimeError("❌ WEBHOOK_URL не задано!")
 
+# 📦 Зберігаємо дані
 user_message_map = {}
 known_users = set()
 user_phonebook = {}
 
-# Зберегти контакт
-def save_contact_to_csv(user_id: int, username: str, full_name: str, phone: str):
+# 📝 Зберегти контакт у CSV
+def save_contact_to_csv(user_id, username, full_name, phone):
     file_exists = os.path.isfile("contacts.csv")
     rows = []
     if file_exists:
         with open("contacts.csv", "r", newline='', encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
+            rows = list(csv.DictReader(f))
 
     updated = False
     for row in rows:
@@ -57,39 +59,21 @@ def save_contact_to_csv(user_id: int, username: str, full_name: str, phone: str)
         writer.writeheader()
         writer.writerows(rows)
 
-# /start
+# ✅ /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Бот працює через Webhook!")
 
-# /export
+# 📤 /export
 async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
     try:
         with open("contacts.csv", "rb") as f:
-            await update.message.reply_document(document=InputFile(f), filename="contacts.csv")
+            await update.message.reply_document(InputFile(f), filename="contacts.csv")
     except FileNotFoundError:
-        await update.message.reply_text("❌ Файл contacts.csv ще не створено.")
+        await update.message.reply_text("❌ Файл ще не створено.")
 
-# контакт
-async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    contact: Contact = update.message.contact
-    user_id = contact.user_id or update.effective_user.id
-    phone = contact.phone_number
-
-    user_phonebook[user_id] = phone
-    save_contact_to_csv(
-        user_id=user_id,
-        username=update.effective_user.username,
-        full_name=update.effective_user.full_name or "",
-        phone=phone
-    )
-
-    await update.message.reply_text("✅ Номер збережено. Дякуємо!")
-    user_display = f"@{update.effective_user.username}" if update.effective_user.username else update.effective_user.full_name
-    await context.bot.send_message(chat_id=ADMIN_ID, text=f"📥 {user_display} надіслав номер: {phone}")
-
-# повідомлення
+# 📥 Вхідне повідомлення
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
@@ -128,9 +112,27 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     if user_id not in user_phonebook:
         button = KeyboardButton("📲 Надіслати номер", request_contact=True)
         reply_markup = ReplyKeyboardMarkup([[button]], resize_keyboard=True, one_time_keyboard=True)
-        await msg.reply_text("Будь ласка, поділіться номером телефону:", reply_markup=reply_markup)
+        await msg.reply_text("Будь ласка, поділіться своїм номером телефону:", reply_markup=reply_markup)
 
-# відповідь
+# ☎️ Контакт
+async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    contact: Contact = update.message.contact
+    user_id = contact.user_id or update.effective_user.id
+    phone = contact.phone_number
+
+    user_phonebook[user_id] = phone
+    save_contact_to_csv(
+        user_id=user_id,
+        username=update.effective_user.username,
+        full_name=update.effective_user.full_name or "",
+        phone=phone
+    )
+
+    await update.message.reply_text("✅ Номер збережено. Дякуємо!")
+    display = f"@{update.effective_user.username}" if update.effective_user.username else update.effective_user.full_name
+    await context.bot.send_message(chat_id=ADMIN_ID, text=f"📥 {display} надіслав номер: {phone}")
+
+# 🔁 Відповідь/розсилка
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -144,58 +146,4 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         user_id, user_msg_id = user_data
         if update.message.text:
-            await context.bot.send_message(chat_id=user_id, text=update.message.text, reply_to_message_id=user_msg_id)
-        elif update.message.photo:
-            file_id = update.message.photo[-1].file_id
-            await context.bot.send_photo(chat_id=user_id, photo=file_id, reply_to_message_id=user_msg_id)
-        elif update.message.video:
-            file_id = update.message.video.file_id
-            await context.bot.send_video(chat_id=user_id, video=file_id, reply_to_message_id=user_msg_id)
-        else:
-            await update.message.reply_text("❗ Лише текст, фото або відео.")
-            return
-
-        await update.message.reply_text("✅ Відповідь надіслано!")
-
-# реакція
-async def handle_reaction_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    parts = query.data.split("_")
-    if len(parts) != 4:
-        await context.bot.send_message(chat_id=ADMIN_ID, text="❗ Невірна реакція.")
-        return
-
-    _, user_id_str, user_msg_id_str, reaction_key = parts
-    try:
-        user_id = int(user_id_str)
-        user_msg_id = int(user_msg_id_str)
-    except ValueError:
-        await context.bot.send_message(chat_id=ADMIN_ID, text="❌ Некоректні ID.")
-        return
-
-    reactions = {
-        "heart": "❤️ Сердечко",
-        "like": "👍 Лайк",
-        "lol": "😂 Смішно",
-        "handshake": "🤝 Рукостискання",
-        "fire": "🔥 Вогонь"
-    }
-
-    text = reactions.get(reaction_key, "❓ Невідома реакція")
-    await context.bot.send_message(chat_id=query.from_user.id, text=f"✅ Ви вибрали: {text}")
-    await context.bot.send_message(chat_id=user_id, text=f"🔁 Адміністратор відреагував: {text}", reply_to_message_id=user_msg_id)
-
-# webhook
-async def handle_webhook(request):
-    try:
-        data = await request.json()
-        update = Update.de_json(data, application.bot)
-        await application.process_update(update)
-        return web.Response(text="ok")
-    except Exception as e:
-        logging.error(f"❌ Webhook помилка: {e}")
-        return web.Response(status=500)
-
-# за
+            await context.bot.send_message(chat_id=user_id, text=update.message.text, reply_to_message_id=user
