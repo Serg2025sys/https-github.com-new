@@ -151,7 +151,6 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("✅ Відповідь надіслано!")
         return
 
-    # Розсилка
     count, failed = 0, 0
     for user_id in known_users:
         try:
@@ -210,6 +209,10 @@ async def handle_webhook(request):
         logging.error(f"❌ Webhook error: {e}")
         return web.Response(status=500)
 
+# ➕ Додатковий GET маршрут для перевірки
+async def handle_root(request):
+    return web.Response(text="✅ Бот живий!")
+
 async def main():
     global application
     application = Application.builder().token(TOKEN).build()
@@ -223,6 +226,8 @@ async def main():
 
     app = web.Application()
     app.router.add_post("/webhook", handle_webhook)
+    app.router.add_get("/", handle_root)
+
     port = int(os.environ.get("PORT", 8080))
     runner = web.AppRunner(app)
     await runner.setup()
