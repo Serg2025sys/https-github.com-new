@@ -13,7 +13,7 @@ from telegram.ext import (
 
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN = 8076139113:AAGgi6Gjtdqh2nBPSfDYP4OlDkPzhrdy8ro
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 ADMIN_ID = 466868254
 
