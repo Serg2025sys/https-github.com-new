@@ -24,7 +24,7 @@ if not TOKEN:
 if not WEBHOOK_URL:
     raise RuntimeError("❌ WEBHOOK_URL не задано!")
 
-# 📦 Зберігаємо дані
+# 📦 Пам'ять
 user_message_map = {}
 known_users = set()
 user_phonebook = {}
@@ -73,7 +73,7 @@ async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except FileNotFoundError:
         await update.message.reply_text("❌ Файл ще не створено.")
 
-# 📥 Вхідне повідомлення
+# 📥 Повідомлення від користувача
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
@@ -146,4 +146,108 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         user_id, user_msg_id = user_data
         if update.message.text:
-            await context.bot.send_message(chat_id=user_id, text=update.message.text, reply_to_message_id=user
+            await context.bot.send_message(chat_id=user_id, text=update.message.text, reply_to_message_id=user_msg_id)
+        elif update.message.photo:
+            file_id = update.message.photo[-1].file_id
+            await context.bot.send_photo(chat_id=user_id, photo=file_id, reply_to_message_id=user_msg_id)
+        elif update.message.video:
+            file_id = update.message.video.file_id
+            await context.bot.send_video(chat_id=user_id, video=file_id, reply_to_message_id=user_msg_id)
+        else:
+            await update.message.reply_text("❗ Підтримуються лише текст, фото або відео.")
+            return
+
+        await update.message.reply_text("✅ Відповідь надіслано!")
+        return
+
+    # Розсилка
+    count, failed = 0, 0
+    for user_id in known_users:
+        try:
+            if update.message.text:
+                await context.bot.send_message(chat_id=user_id, text=update.message.text)
+            elif update.message.photo:
+                file_id = update.message.photo[-1].file_id
+                await context.bot.send_photo(chat_id=user_id, photo=file_id)
+            elif update.message.video:
+                file_id = update.message.video.file_id
+                await context.bot.send_video(chat_id=user_id, video=file_id)
+            count += 1
+        except Exception as e:
+            logging.warning(f"❌ Не вдалося надіслати до {user_id}: {e}")
+            failed += 1
+
+    await update.message.reply_text(f"📢 Розсилка завершена: ✅ {count}, ❌ {failed}")
+
+# 🌟 Реакції
+async def handle_reaction_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    parts = query.data.split("_")
+    if len(parts) != 4:
+        await context.bot.send_message(chat_id=ADMIN_ID, text="❗ Невірна реакція.")
+        return
+
+    _, user_id_str, user_msg_id_str, reaction_key = parts
+    try:
+        user_id = int(user_id_str)
+        user_msg_id = int(user_msg_id_str)
+    except ValueError:
+        await context.bot.send_message(chat_id=ADMIN_ID, text="❌ Некоректні ID.")
+        return
+
+    reactions = {
+        "heart": "❤️ Сердечко",
+        "like": "👍 Лайк",
+        "lol": "😂 Смішно",
+        "handshake": "🤝 Рукостискання",
+        "fire": "🔥 Вогонь"
+    }
+
+    reaction_text = reactions.get(reaction_key, "❓ Невідома реакція")
+
+    await context.bot.send_message(chat_id=query.from_user.id, text=f"✅ Ви вибрали: {reaction_text}")
+    await context.bot.send_message(chat_id=user_id, text=f"🔁 Адміністратор відреагував: {reaction_text}", reply_to_message_id=user_msg_id)
+
+# 🌐 Webhook
+async def handle_webhook(request):
+    try:
+        data = await request.json()
+        update = Update.de_json(data, application.bot)
+        await application.process_update(update)
+        return web.Response(text="ok")
+    except Exception as e:
+        logging.error(f"❌ Webhook error: {e}")
+        return web.Response(status=500)
+
+# ▶️ Запуск
+async def main():
+    global application
+    application = Application.builder().token(TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("export", export_csv))
+    application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
+    application.add_handler(MessageHandler(~filters.User(user_id=ADMIN_ID), handle_user_message))
+    application.add_handler(MessageHandler(filters.User(user_id=ADMIN_ID), handle_admin_reply))
+    application.add_handler(CallbackQueryHandler(handle_reaction_callback))
+
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+    logging.info(f"✅ Webhook встановлено на: {WEBHOOK_URL}/webhook")
+
+    app = web.Application()
+    app.router.add_post("/webhook", handle_webhook)
+    port = int(os.environ.get("PORT", 8080))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, port=port)
+    await site.start()
+    logging.info(f"🚀 Сервер запущено на порту {port}")
+
+if __name__ == '__main__':
+    import asyncio
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logging.error(f"❌ Помилка запуску: {e}")
