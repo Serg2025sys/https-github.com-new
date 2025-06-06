@@ -18,7 +18,7 @@ import os
 logging.basicConfig(level=logging.INFO)
 
 # 🔑 Дані
-TOKEN = "8076139113:AAFyoST8xeqthC3b2X-0YY8Mbys4bqzMizY"
+TOKEN = "8076139113:AAGgi6Gjtdqh2nBPSfDYP4OlDkPzhrdy8ro"
 ADMIN_ID = 466868254
 
 # 📦 Пам’ять
