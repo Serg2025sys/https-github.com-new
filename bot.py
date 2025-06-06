@@ -11,10 +11,8 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 
-# 🔧 Логи
 logging.basicConfig(level=logging.INFO)
 
-# 🔑 Дані з середовища
 TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 ADMIN_ID = 466868254
@@ -24,12 +22,10 @@ if not TOKEN:
 if not WEBHOOK_URL:
     raise RuntimeError("❌ WEBHOOK_URL не задано!")
 
-# 📦 Пам'ять
 user_message_map = {}
 known_users = set()
 user_phonebook = {}
 
-# 📝 Зберегти контакт у CSV
 def save_contact_to_csv(user_id, username, full_name, phone):
     file_exists = os.path.isfile("contacts.csv")
     rows = []
@@ -59,11 +55,9 @@ def save_contact_to_csv(user_id, username, full_name, phone):
         writer.writeheader()
         writer.writerows(rows)
 
-# ✅ /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Бот працює через Webhook!")
 
-# 📤 /export
 async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -73,7 +67,6 @@ async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except FileNotFoundError:
         await update.message.reply_text("❌ Файл ще не створено.")
 
-# 📥 Повідомлення від користувача
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
@@ -114,7 +107,6 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup = ReplyKeyboardMarkup([[button]], resize_keyboard=True, one_time_keyboard=True)
         await msg.reply_text("Будь ласка, поділіться своїм номером телефону:", reply_markup=reply_markup)
 
-# ☎️ Контакт
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contact: Contact = update.message.contact
     user_id = contact.user_id or update.effective_user.id
@@ -132,7 +124,6 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     display = f"@{update.effective_user.username}" if update.effective_user.username else update.effective_user.full_name
     await context.bot.send_message(chat_id=ADMIN_ID, text=f"📥 {display} надіслав номер: {phone}")
 
-# 🔁 Відповідь/розсилка
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -179,7 +170,6 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await update.message.reply_text(f"📢 Розсилка завершена: ✅ {count}, ❌ {failed}")
 
-# 🌟 Реакції
 async def handle_reaction_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -210,18 +200,16 @@ async def handle_reaction_callback(update: Update, context: ContextTypes.DEFAULT
     await context.bot.send_message(chat_id=query.from_user.id, text=f"✅ Ви вибрали: {reaction_text}")
     await context.bot.send_message(chat_id=user_id, text=f"🔁 Адміністратор відреагував: {reaction_text}", reply_to_message_id=user_msg_id)
 
-# 🌐 Webhook
 async def handle_webhook(request):
     try:
         data = await request.json()
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
-        return web.Response(text="ok")
+        return web.Response(text="ok", status=200)
     except Exception as e:
         logging.error(f"❌ Webhook error: {e}")
         return web.Response(status=500)
 
-# ▶️ Запуск
 async def main():
     global application
     application = Application.builder().token(TOKEN).build()
@@ -233,9 +221,6 @@ async def main():
     application.add_handler(MessageHandler(filters.User(user_id=ADMIN_ID), handle_admin_reply))
     application.add_handler(CallbackQueryHandler(handle_reaction_callback))
 
-    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-    logging.info(f"✅ Webhook встановлено на: {WEBHOOK_URL}/webhook")
-
     app = web.Application()
     app.router.add_post("/webhook", handle_webhook)
     port = int(os.environ.get("PORT", 8080))
@@ -244,6 +229,9 @@ async def main():
     site = web.TCPSite(runner, port=port)
     await site.start()
     logging.info(f"🚀 Сервер запущено на порту {port}")
+
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+    logging.info(f"✅ Webhook встановлено на: {WEBHOOK_URL}/webhook")
 
 if __name__ == '__main__':
     import asyncio
